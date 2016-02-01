@@ -24,7 +24,7 @@ pos = [gt_rects(1, 2) + gt_rects(1, 4) / 2, gt_rects(1, 1) + gt_rects(1, 3) / 2]
 target_sz = [gt_rects(1, 4),  gt_rects(1, 3)];
 win_sz = target_sz * (1 + padding);
 
-for iframe = 1 : 2
+for iframe = 1 : 10
     % Read input
     img_file_path = sprintf('%s/img/%04d.jpg', IMG_DIR, iframe);
     img = imread(img_file_path);
@@ -85,8 +85,13 @@ for iframe = 1 : 2
         % Ransac affine estimate
         % affine background
         fg_pt_matches = pt_matches(pt_matches(:, 5) ~= -1, :);
-        % H = cv.findHomography(fg_pt_matches(:, 1:2), fg_pt_matches(:, 3:4), 'Method', 'Ransac');
-        % tform = estimateGeometricTransform(fg_pt_matches(:, 1:2), fg_pt_matches(:, 3:4), 'affine');
+        [mcenter, scale, rotation] = affine_estimate(fg_pt_matches(:, 1:2), fg_pt_matches(:, 3:4));
+        disp(rotation);
+        
+        % Mock prediction
+        pos = [gt_rects(iframe, 2) + gt_rects(iframe, 4) / 2, gt_rects(iframe, 1) + gt_rects(iframe, 3) / 2];
+        target_sz = [gt_rects(iframe, 4),  gt_rects(iframe, 3)];
+        win_sz = target_sz * (1 + padding);
     end
     
     %{
@@ -111,10 +116,15 @@ for iframe = 1 : 2
     end
     %}
 
+    %{
     if double(get(gcf,'CurrentCharacter')) == 27
         break;
     end
     pause(0.03);
+    %}
+    
+    % Update
+    
     
     prev_gray = gray;
     
