@@ -8,7 +8,7 @@ THR_RATIO = 0.8; % Point-wise matching confidence ratio between 1st and 2nd best
 THR_SPACE_DIST = 20; % Spatial distance between correspondence points
 
 % Input
-SEQ_NAME = 'motorrolling';
+SEQ_NAME = 'dog1';
 IMG_DIR = sprintf('D:/Dataset/tracking/seq_bench/%s', SEQ_NAME);
 GT_FILE_NAME = 'groundtruth_rect.txt';
 detector = cv.BRISK();
@@ -24,9 +24,16 @@ pos = [gt_rects(1, 2) + gt_rects(1, 4) / 2, gt_rects(1, 1) + gt_rects(1, 3) / 2]
 target_sz = [gt_rects(1, 4),  gt_rects(1, 3)];
 win_sz = target_sz * (1 + padding);
 
-for iframe = 1 : 10
+arrow_angle = 0;
+rotation = 0;
+
+for iframe = 1 : 1000
     % Read input
     img_file_path = sprintf('%s/img/%04d.jpg', IMG_DIR, iframe);
+    if ~exist(img_file_path, 'file')
+        break;
+    end
+    
     img = imread(img_file_path);
     if ndims(img) == 3
         gray = rgb2gray(img);
@@ -70,6 +77,10 @@ for iframe = 1 : 10
         matches = matcher.knnMatch(query_features, active_features, 2);
         
         % kNN matching
+        %
+        % row meaning of pt_matches:
+        % pt_in_prev_gray, pt_in_gray, pt_class_id_in_prev_gray,
+        % pt_query_idx
         pt_matches = [];
         for imatch = 1 : numel(matches)
             sim1 = 1 - matches{imatch}(1).distance / DIST_MAX;
@@ -78,14 +89,15 @@ for iframe = 1 : 10
             dst_pt = query_keypoints(matches{imatch}(1).queryIdx + 1, 1:2);
             spatial_dist = sqrt(sum((src_pt - dst_pt) .^ 2));
             if sim1 > THR_CONF && (1 - sim1) / (1 - sim2) < THR_RATIO && spatial_dist < THR_SPACE_DIST
-                pt_matches(end +  1, :) = [src_pt, dst_pt, active_keypoints(matches{imatch}(1).trainIdx + 1, 3)];
+                pt_matches(end +  1, :) = [src_pt, dst_pt, active_keypoints(matches{imatch}(1).trainIdx + 1, 3), ...
+                    matches{imatch}(1).queryIdx + 1];
             end
         end
         
-        % Ransac affine estimate
-        % affine background
+        % Ransac affine estimate by foreground points
         fg_pt_matches = pt_matches(pt_matches(:, 5) ~= -1, :);
-        [mcenter, scale, rotation] = affine_estimate(fg_pt_matches(:, 1:2), fg_pt_matches(:, 3:4));
+        bg_pt_matches = pt_matches(pt_matches(:, 5) == -1, :);
+        [mcenter, scale, rotation] = affine_estimate(fg_pt_matches(:, 3:4), fg_pt_matches(:, 1:2));
         disp(rotation);
         
         % Mock prediction
@@ -94,7 +106,7 @@ for iframe = 1 : 10
         win_sz = target_sz * (1 + padding);
     end
     
-    %{
+
     if iframe == 1
         img_h = imshow(img, 'Border','tight', 'InitialMag', 100);
         hold on;
@@ -102,11 +114,19 @@ for iframe = 1 : 10
         set(img_h, 'CData', img);
     end
     
+    % 显示旋转情况
+    arrow_angle = arrow_angle + rotation;
     if iframe > 1
-         plot(fg_pt_matches(:, 1), fg_pt_matches(:, 2), '.', 'Color', [1, 0, 0]);
-         plot(fg_pt_matches(:, 3), fg_pt_matches(:, 4), '.', 'Color', [0, 1, 1]);
+        delete(rect_h);
     end
-    %}
+    rect_h = DrawRectangle([pos(2), pos(1), target_sz(2), target_sz(1), arrow_angle]);  
+    
+    % 在图中显示匹配点
+    if iframe > 1
+        delete(pts_h);
+        % plot(fg_pt_matches(:, 3), fg_pt_matches(:, 4), '.', 'Color', [0, 1, 1]);
+    end
+    pts_h = plot(fg_pt_matches(:, 3), fg_pt_matches(:, 4), '.', 'Color', [1, 0, 0]);
 
     % Debug
     % 显示点匹配情况
@@ -116,17 +136,32 @@ for iframe = 1 : 10
     end
     %}
 
-    %{
     if double(get(gcf,'CurrentCharacter')) == 27
         break;
     end
     pause(0.03);
-    %}
     
     % Update
-    
-    
+    % Replace, Remove and Add keypoints in active_keypoints based on
+    % matching result
+    if iframe > 1
+        % Delete query_keypoints matching background keypoints in prev_gray
+        ind_keypoints_bg_in_fg = zeros(size(query_keypoints, 1), 1);
+        ind_keypoints_bg_in_fg(bg_pt_matches(:, 6)) = 1;
+        
+        [keypoints_fg, ind_keypoints_fg] = pt_in_region(query_keypoints, pos, target_sz, img_sz);
+        %keypoints_fg = query_keypoints(ind_keypoints_fg & ~ind_keypoints_bg_in_fg, :);
+        keypoints_fg = [keypoints_fg, (1 : size(keypoints_fg, 1))'];
+        keypoints_bg = query_keypoints(~ind_keypoints_fg, :);
+        %keypoints_bg = query_keypoints(~ind_keypoints_fg | ind_keypoints_bg_in_fg, :);
+        keypoints_bg = [keypoints_bg, -ones(size(keypoints_bg, 1), 1)];
+        active_keypoints = [keypoints_fg; keypoints_bg]; 
+        % Get keypoint index: foreground/background keypoints in active keypoints
+        ind_fb_in_ak = [find(ind_keypoints_fg);find(~ind_keypoints_fg)];
+        active_keypoints_cv = query_keypoints_cv(ind_fb_in_ak);
+        active_features = query_features(ind_fb_in_ak, :);
+    end
+
     prev_gray = gray;
-    
 end
 
