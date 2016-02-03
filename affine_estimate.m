@@ -14,7 +14,7 @@ v = keypoints(ind1, :) - keypoints(ind2, :);
 dist_pairs = sqrt(sum(v .* v, 2));
 angle_pairs = atan2(v(:, 2), v(:, 1));
 diff_scale = dist_pairs ./ prev_dist_pairs;
-diff_scale = diff_scale(~isnan(diff_scale));
+diff_scale = diff_scale(~isinf(diff_scale) & ~isnan(diff_scale));
 % disp(dist_point_pairs(isnan(diff_scale)));
 % disp(prev_dist_point_pairs(isnan(diff_scale)));
 diff_angle = angle_pairs - prev_angle_pairs;
