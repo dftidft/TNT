@@ -8,10 +8,14 @@ THR_RATIO = 0.8; % Point-wise matching confidence ratio between 1st and 2nd best
 THR_SPACE_DIST = 20; % Spatial distance between correspondence points
 
 % Input
+BASE_PATH = 'D:/Dataset/tracking/seq_bench/';
 SEQ_NAME = 'dog1';
-IMG_DIR = sprintf('D:/Dataset/tracking/seq_bench/%s', SEQ_NAME);
+IMG_DIR = sprintf('%s/%s', BASE_PATH, SEQ_NAME);
 GT_FILE_NAME = 'groundtruth_rect.txt';
 detector = cv.BRISK();
+
+show_visualization = true;
+[img_files, ~, ~, ~, video_path] = load_video_info(BASE_PATH, SEQ_NAME);
 
 DIST_MAX = 512;
 matcher = cv.DescriptorMatcher('BruteForce-Hamming');
@@ -27,6 +31,10 @@ win_sz = target_sz * (1 + padding);
 arrow_angle = 0;
 rotation = 0;
 
+
+if show_visualization,  %create video interface
+    update_visualization = show_video(img_files, video_path, false);
+end
 for iframe = 1 : 1000
     % Read input
     img_file_path = sprintf('%s/img/%04d.jpg', IMG_DIR, iframe);
@@ -106,27 +114,39 @@ for iframe = 1 : 1000
         win_sz = target_sz * (1 + padding);
     end
     
-
-    if iframe == 1
-        img_h = imshow(img, 'Border','tight', 'InitialMag', 100);
-        hold on;
-    else
-        set(img_h, 'CData', img);
+    if show_visualization,
+        arrow_angle = arrow_angle + rotation;
+        data.rotated_rect = [pos(2), pos(1), target_sz(2), target_sz(1), arrow_angle];
+        if iframe > 1
+            data.fg_pt_matches = fg_pt_matches;
+            data.bg_pt_matches = bg_pt_matches;
+        end
+        stop = update_visualization(iframe, data);
+        if stop, break, end  %user pressed Esc, stop early
+        drawnow
+        % pause(0.05)  %uncomment to run slower
     end
     
-    % 显示旋转情况
-    arrow_angle = arrow_angle + rotation;
-    if iframe > 1
-        delete(rect_h);
-    end
-    rect_h = DrawRectangle([pos(2), pos(1), target_sz(2), target_sz(1), arrow_angle]);  
-    
-    % 在图中显示匹配点
-    if iframe > 1
-        delete(pts_h);
-        % plot(fg_pt_matches(:, 3), fg_pt_matches(:, 4), '.', 'Color', [0, 1, 1]);
-    end
-    pts_h = plot(fg_pt_matches(:, 3), fg_pt_matches(:, 4), '.', 'Color', [1, 0, 0]);
+%     if iframe == 1
+%         img_h = imshow(img, 'Border','tight', 'InitialMag', 100);
+%         hold on;
+%     else
+%         set(img_h, 'CData', img);
+%     end
+%     
+%     % 在图中显示匹配点
+%     if iframe > 1
+%         delete(pts_h);
+%         delete(pts_h2);
+%         % plot(fg_pt_matches(:, 3), fg_pt_matches(:, 4), '.', 'Color', [0, 1, 1]);
+%     end
+%     pts_h = plot(fg_pt_matches(:, 3), fg_pt_matches(:, 4), '.', 'Color', [1, 0, 0]);
+%     pts_h2 = plot(bg_pt_matches(:, 3), bg_pt_matches(:, 4), '.', 'Color', [0, 1, 1]);
+%     
+%     if iframe > 1
+%         delete(text_h);
+%     end
+%     text_h = text(10, 10, sprintf('%d', iframe));
 
     % Debug
     % 显示点匹配情况
@@ -136,10 +156,10 @@ for iframe = 1 : 1000
     end
     %}
 
-    if double(get(gcf,'CurrentCharacter')) == 27
-        break;
-    end
-    pause(0.03);
+%     if double(get(gcf,'CurrentCharacter')) == 27
+%         break;
+%     end
+%     pause(0.03);
     
     % Update
     % Replace, Remove and Add keypoints in active_keypoints based on
